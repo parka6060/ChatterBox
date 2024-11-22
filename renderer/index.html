@@ -1,0 +1,382 @@
+<!-- renderer/index.html -->
+
+<!DOCTYPE html>
+<html lang="en" class="transition-colors duration-300">
+<head>
+  <meta charset="UTF-8">
+  <title>Control Panel a_1.0</title>
+  <!-- Link to the generated Tailwind CSS -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-start p-6 transition-colors duration-300 dark:bg-gray-900">
+  
+  <!-- Logo Area -->
+  <div class="w-full max-w-md flex flex-col items-center mb-6">
+    <img src="logo.png" alt="Control Panel Logo" class="h-32 w-32 mb-3">
+    
+    <!-- Title and Version Tag Inline -->
+    <div class="flex items-center">
+      <h1 class="text-3xl font-extrabold text-yellow-600 dark:text-yellow-400">Control Panel</h1>
+      <span class="ml-2 inline-block bg-yellow-200 text-yellow-800 text-xs font-semibold px-2 py-1 rounded-full dark:bg-yellow-700 dark:text-yellow-200">a_1.0</span>
+    </div>
+  </div>
+
+  <!-- Main Card -->
+  <div class="card w-full max-w-md bg-white shadow-md dark:bg-gray-800 rounded-lg">
+    <div class="card-body p-4">
+
+      <!-- OBS Browser Source as Draggable Link -->
+      <div class="mb-4">
+        <label for="server-link" class="block mb-1 text-md font-semibold text-gray-800 dark:text-gray-200">OBS Browser Source:</label>
+        <a 
+          id="server-link" 
+          href="#" 
+          class="btn btn-primary w-full text-center cursor-pointer select-none rounded-md shadow-sm hover:bg-yellow-500 transition-colors duration-300" 
+          draggable="true"
+          ondragstart="handleDragStart(event)"
+        >
+          Drag into OBS
+        </a>
+        <!-- Hidden element to store the URL -->
+        <span id="server-url" class="hidden">Loading...</span>
+      </div>
+
+      <!-- Microphone & Audio Activity Section -->
+      <div id="mic-audio-section" class="mb-4">
+        <h3 class="text-lg font-medium mb-2 text-gray-800 dark:text-gray-200">Microphone & Audio</h3>
+        <div class="flex flex-col space-y-3">
+
+          <!-- Microphone Selection -->
+          <div>
+            <label for="mic-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Select Microphone</label>
+            <select id="mic-select" class="mt-1 block w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200">
+              <option disabled selected>Loading microphones...</option>
+            </select>
+          </div>
+
+          <!-- Audio Activity Indicator -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Audio Level: <span id="db-value" class="font-semibold">-∞ dB</span></label>
+            <div class="w-full bg-gray-300 rounded-full h-3 overflow-hidden dark:bg-gray-600">
+              <div id="audio-bar" class="bg-yellow-500 h-3 transition-all duration-300" style="width: 0%"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="border-t border-gray-200 dark:border-gray-700 mb-4"></div>
+
+      <!-- Settings Section -->
+      <div id="settings-section">
+        <h3 class="text-lg font-medium mb-2 text-gray-800 dark:text-gray-200">Settings</h3>
+        
+        <!-- Adjust Settings -->
+        <div class="mb-3">
+          <h4 class="text-md font-semibold mb-2 text-gray-700 dark:text-gray-300">Mic Settings</h4>
+          
+          <!-- Activation Threashold Slider -->
+          <div class="mb-3">
+            <label for="activationSlider" class="flex justify-between text-sm font-medium text-gray-700 dark:text-gray-300">
+              <span>Activaton Threashold:</span>
+              <span id="activationValue">10%</span>
+            </label>
+            <input type="range" min="0" max="100" value="10" id="activationSlider" class="mt-1 w-full range range-yellow-500 dark:range-yellow-700" />
+          </div>
+
+
+        <!-- Toggle Settings -->
+        <div>
+          <h4 class="text-md font-semibold mb-2 text-gray-700 dark:text-gray-300">Toggle Settings</h4>
+          
+          <!-- Notifications Toggle -->
+          <div class="form-control mb-3">
+            <label class="cursor-pointer label flex justify-between items-center">
+              <span class="label-text text-gray-700 dark:text-gray-300">Enable Notifications</span> 
+              <input type="checkbox" id="notificationsToggle" class="toggle toggle-yellow-500 dark:toggle-yellow-700" checked />
+            </label>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 right-6 bg-yellow-500 text-white px-4 py-3 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 flex items-center">
+    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+    </svg>
+    <span>Link copied!</span>
+  </div>
+
+  <!-- DaisyUI Themes (Optional) -->
+  <script>
+    function handleDragStart(event) {
+      const serverUrl = document.getElementById('server-url').textContent;
+      event.dataTransfer.setData("text/plain", serverUrl);
+    }
+  </script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const serverUrlElement = document.getElementById('server-url');
+    const serverLink = document.getElementById('server-link');
+    const micSelect = document.getElementById('mic-select');
+    const audioBar = document.getElementById('audio-bar');
+    const dbDisplay = document.getElementById('db-value');
+    const toast = document.getElementById('toast');
+
+    // Variables for audio handling
+    let audioContext = null;
+    let analyser = null;
+    let microphone = null;
+    let dataArray = null;
+    let animationFrame = null;
+    let audioStream = null;
+    let smoothedDb = -60;
+    const smoothingFactor = 0.8;
+
+    // Listen for the server port sent from the main process
+    window.api.onServerPort((port) => {
+      console.log(`Received server port via event: ${port}`);
+      if (port) {
+        const url = `http://localhost:${port}/page?layer-name=MySource&layer-width=800&layer-height=600`;
+        serverUrlElement.textContent = url;
+        serverLink.href = url;
+      } else {
+        serverUrlElement.textContent = 'Port not available';
+        serverLink.href = '#';
+      }
+    });
+
+    // Optionally, request the server port when the renderer loads
+    window.api.getServerPort().then((port) => {
+      console.log(`Received server port via IPC handler: ${port}`);
+      if (port) {
+        const url = `http://localhost:${port}/page?layer-name=MySource&layer-width=800&layer-height=600`;
+        serverUrlElement.textContent = url;
+        serverLink.href = url;
+      } else {
+        serverUrlElement.textContent = 'Port not available';
+        serverLink.href = '#';
+      }
+    }).catch((err) => {
+      console.error('Error fetching server port:', err);
+      serverUrlElement.textContent = 'Error fetching port';
+      serverLink.href = '#';
+    });
+
+    // Function to enumerate audio input devices
+    async function populateMics() {
+      try {
+        // Request microphone access to enumerate devices
+        await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = devices.filter(device => device.kind === 'audioinput');
+
+        // Clear existing options
+        micSelect.innerHTML = '';
+
+        if (audioInputs.length === 0) {
+          micSelect.innerHTML = '<option>No microphone devices found</option>';
+          return;
+        }
+
+        // Populate the dropdown with audio input devices
+        audioInputs.forEach((device, index) => {
+          const option = document.createElement('option');
+          option.value = device.deviceId;
+          option.text = device.label || `Microphone ${index + 1}`;
+          micSelect.appendChild(option);
+        });
+
+        // Set the current selected microphone
+        const initialDeviceId = audioInputs[0].deviceId;
+        micSelect.value = initialDeviceId;
+
+        // Start capturing audio from the initial microphone
+        await startAudioCapture(initialDeviceId);
+      } catch (err) {
+        console.error('Error enumerating microphones:', err);
+        micSelect.innerHTML = '<option>Microphone access denied</option>';
+      }
+    }
+
+    // Function to start capturing audio from a specific device
+    async function startAudioCapture(deviceId) {
+      console.log(`Starting audio capture for device ID: ${deviceId}`);
+
+      // Cleanup existing audio context and stream
+      if (audioStream) {
+        console.log('Stopping existing audio tracks');
+        audioStream.getTracks().forEach(track => track.stop());
+        audioStream = null;
+      }
+
+      if (audioContext) {
+        console.log('Closing existing AudioContext');
+        try {
+          if (analyser && microphone) {
+            microphone.disconnect();
+            analyser.disconnect();
+          }
+          await audioContext.close();
+        } catch (err) {
+          console.error('Error closing AudioContext:', err);
+        }
+        audioContext = null;
+        analyser = null;
+        microphone = null;
+        dataArray = null;
+      }
+
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: { exact: deviceId },
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+          video: false
+        });
+        console.log('Audio stream obtained');
+
+        // Create audio context and analyser
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        microphone = audioContext.createMediaStreamSource(audioStream);
+
+        // Configure analyser
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.8;
+        microphone.connect(analyser);
+
+        dataArray = new Float32Array(analyser.frequencyBinCount);
+
+        // Start visualization
+        visualize();
+      } catch (err) {
+        console.error('Error accessing microphone:', err);
+      }
+    }
+
+    function visualize() {
+      if (!analyser) {
+        console.warn('Analyser not available for visualization');
+        return;
+      }
+
+      analyser.getFloatTimeDomainData(dataArray);
+
+      let rms = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        rms += dataArray[i] * dataArray[i];
+      }
+      rms = Math.sqrt(rms / dataArray.length);
+
+      const noiseFloor = -60;
+      let db = 20 * Math.log10(Math.max(rms, 1e-7));
+      db = Math.max(noiseFloor, Math.min(0, db));
+
+      smoothedDb = smoothedDb * smoothingFactor + db * (1 - smoothingFactor);
+      const displayDb = Math.round(smoothedDb * 10) / 10;
+
+      const normalizedDb = Math.max(0, Math.min(100, ((smoothedDb - noiseFloor) / (-noiseFloor)) * 100));
+
+      audioBar.style.width = `${normalizedDb}%`;
+
+      if (normalizedDb > 80) {
+        audioBar.className = 'bg-red-500 h-3 rounded-full transition-all duration-300';
+      } else if (normalizedDb > 60) {
+        audioBar.className = 'bg-yellow-500 h-3 rounded-full transition-all duration-300';
+      } else {
+        audioBar.className = 'bg-yellow-400 h-3 rounded-full transition-all duration-300';
+      }
+
+      if (dbDisplay) {
+        dbDisplay.textContent = smoothedDb > (noiseFloor + 5) ? `${displayDb} dB` : 'Silent';
+      }
+
+      animationFrame = requestAnimationFrame(visualize);
+    }
+
+    // Event listener for microphone selection change
+    micSelect.addEventListener('change', async (event) => {
+      const selectedDeviceId = event.target.value;
+      console.log('Selected microphone device ID:', selectedDeviceId);
+      await startAudioCapture(selectedDeviceId);
+    });
+
+    // Initialize the microphone selection on page load
+    populateMics();
+
+    // Sliders
+    const activationSlider = document.getElementById('activationSlider');
+    const activationValue = document.getElementById('activationValue');
+    const brightnessSlider = document.getElementById('brightnessSlider');
+    const brightnessValue = document.getElementById('brightnessValue');
+
+    activationSlider.addEventListener('input', () => {
+      activationValue.textContent = `${activationSlider.value}%`;
+      window.api.send('update-activation', parseInt(activationSlider.value));
+    });
+
+    brightnessSlider.addEventListener('input', () => {
+      brightnessValue.textContent = `${brightnessSlider.value}%`;
+      window.api.send('update-brightness', parseInt(brightnessSlider.value));
+    });
+
+    // Server Link Click Event
+    serverLink.addEventListener('click', (event) => {
+      event.preventDefault();
+      const url = serverUrlElement.textContent;
+      if (url && url !== 'Loading...' && url !== 'Port not available' && url !== 'Error fetching port') {
+        navigator.clipboard.writeText(url).then(() => {
+          showToast();
+        }).catch((err) => {
+          console.error('Failed to copy: ', err);
+        });
+      }
+    });
+
+    // Function to show toast notification
+    function showToast() {
+      toast.classList.remove('opacity-0', 'translate-y-4');
+      toast.classList.add('opacity-100', 'translate-y-0');
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-4');
+      }, 3000);
+    }
+
+    // Notifications Toggle
+    const notificationsToggle = document.getElementById('notificationsToggle');
+
+    notificationsToggle.addEventListener('change', () => {
+      window.api.send('toggle-notifications', notificationsToggle.checked);
+    });
+
+    // Clean up on unload
+    window.addEventListener('beforeunload', () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+      if (audioContext) {
+        audioContext.close().then(() => {
+          console.log('AudioContext closed');
+        }).catch((err) => {
+          console.error('Error closing AudioContext:', err);
+        });
+      }
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+        console.log('Audio stream tracks stopped');
+      }
+    });
+
+  });
+</script>
+</body>
+</html>
